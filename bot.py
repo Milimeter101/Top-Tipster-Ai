@@ -7,15 +7,14 @@ from google.genai import types
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
-from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- Environment Variables ရယူခြင်း ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
 # Gemini Setup (Google GenAI SDK)
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -39,19 +38,6 @@ def run_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# --- Gemini API Call with Auto-Retry (503 Errors များကို အလိုအလျောက် ကျော်လွှားရန်) ---
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
-def call_gemini(prompt):
-    response = client.models.generate_content(
-        model='gemini-3.8-flash',
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            thinking_config={'thinking_budget': 0}
-        )
-    )
-    return response
-
 # --- Telegram Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
@@ -70,23 +56,38 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔍 ပွဲစဉ်အချက်အလက်များနှင့် ဘွတ်ကီကြေးများကို စစ်ဆေး၍ သုံးသပ်နေပါသည်။ ခဏစောင့်ပေးပါ...")
 
-    try:
-        prompt = (
-            f"Analyze this match for parlay betting stability and bookmaker odds traps:\n"
-            f"Match: {text}\n"
-            f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
-        )
+    prompt = (
+        f"Analyze this match for parlay betting stability and bookmaker odds traps:\n"
+        f"Match: {text}\n"
+        f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
+    )
 
-        # 3.8 Model ကို အသုံးပြု၍ Auto-Retry ဖြင့် ခေါ်ယူခြင်း
-        response = call_gemini(prompt)
+    success = False
+    last_error = None
 
-        if response and response.text:
-            await update.message.reply_text(response.text, parse_mode="Markdown")
-        else:
-            await update.message.reply_text("⚠️ AI ဘက်မှ အချက်အလက် မရရှိပါ၊ ကျေးဇူးပြု၍ ခဏနေမှ ထပ်ကြိုးစားပါ။")
+    # အကြိမ်ရေ ၃ ကြိမ်အထိ အလိုအလျောက် ထပ်မံကြိုးစားမည့် Loop စနစ်
+    for attempt in range(1, 4):
+        try:
+            response = await client.aio.models.generate_content(
+                model='gemini-3.8-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    thinking_config={'thinking_budget': 0}
+                )
+            )
+            if response and response.text:
+                await update.message.reply_text(response.text, parse_mode="Markdown")
+                success = True
+                break
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Attempt {attempt} failed: {str(e)}")
 
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ ဆာဗာ ခေတ္တဝန်ပိနေပါသည် (503 High Demand)။ ကျေးဇူးပြု၍ ခဏနေမှ ပွဲစဉ်ကို ထပ်မံပို့ပေးပါ။")
+    if not success:
+        error_msg = str(last_error) if last_error else "Unknown error"
+        logger.error(f"All attempts failed. Error: {error_msg}")
+        await update.message.reply_text(f"⚠️ ဆာဗာ ချိတ်ဆက်မှု အဆင်မပြေပါ (Error: {error_msg[:120]})။ ကျေးဇူးပြု၍ ခဏနေမှ ထပ်ကြိုးစားပါ။")
 
 if __name__ == "__main__":
     # 1. Start Dummy Server in background thread for Render Port Binding
@@ -100,5 +101,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
     
-    print("Bot is running with Gemini 3.8 Flash and Auto-Retry...")
+    print("Bot is running with robust async error-handling code...")
     app.run_polling()
