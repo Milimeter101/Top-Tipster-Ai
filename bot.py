@@ -15,7 +15,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
-# Gemini Setup (Google GenAI SDK)
+# Gemini Setup (Google GenAI SDK အသစ်)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 🧠 ဘွတ်ကီကြေး မာယာများကိုပါ ထည့်သွင်းစဉ်းစားမည့် System Instruction
@@ -62,9 +62,9 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
         )
 
-        # Async call to prevent blocking and speed up response
-        response = await client.aio.models.generate_content(
-            model='gemini-2.5-flash',
+        # Gemini Model အသစ်သို့ ပြောင်းလဲထားပါသည်
+        response = client.models.generate_content(
+            model='gemini-3.8-flash',
             contents=prompt,
             config={
                 'system_instruction': SYSTEM_INSTRUCTION,
@@ -87,5 +87,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
     
-    print("Bot is running with async optimizations...")
+    print("Bot is running with network timeout fixes and port binding...")
     app.run_polling()
