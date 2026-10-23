@@ -3,6 +3,7 @@ import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from google import genai
+from google.genai import types
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
@@ -15,7 +16,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
-# Gemini Setup (Google GenAI SDK အသစ်)
+# Gemini Setup (Google GenAI SDK)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 🧠 ဘွတ်ကီကြေး မာယာများကိုပါ ထည့်သွင်းစဉ်းစားမည့် System Instruction
@@ -62,13 +63,14 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
         )
 
-        # Gemini Model အသစ်သို့ ပြောင်းလဲထားပါသည်
-        response = client.models.generate_content(
-            model='gemini-3.8-flash',
+        # Thinking Budget ကို 0 ထားရှိခြင်းဖြင့် အချိန်မဆွဲဘဲ ချက်ချင်း အဖြေထုတ်ပေးမည်
+        response = await client.aio.models.generate_content(
+            model='gemini-2.5-flash',
             contents=prompt,
-            config={
-                'system_instruction': SYSTEM_INSTRUCTION,
-            }
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                thinking_config={'thinking_budget': 0}
+            )
         )
         await update.message.reply_text(response.text, parse_mode="Markdown")
 
@@ -87,5 +89,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
     
-    print("Bot is running with network timeout fixes and port binding...")
+    print("Bot is running with speed-optimized settings...")
     app.run_polling()
