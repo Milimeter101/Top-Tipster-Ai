@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from google import genai
@@ -65,15 +66,14 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success = False
     last_error = None
 
-    # အကြိမ်ရေ ၃ ကြိမ်အထိ အလိုအလျောက် ထပ်မံကြိုးစားမည့် Loop စနစ်
+    # အလွန်တည်ငြိမ်သော gemini-1.5-flash ကို အသုံးပြု၍ ၃ ကြိမ်အထိ စမ်းမည်
     for attempt in range(1, 4):
         try:
             response = await client.aio.models.generate_content(
-                model='gemini-3.8-flash',
+                model='gemini-1.5-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
-                    thinking_config={'thinking_budget': 0}
                 )
             )
             if response and response.text:
@@ -83,6 +83,8 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             last_error = e
             logger.warning(f"Attempt {attempt} failed: {str(e)}")
+            if attempt < 3:
+                await asyncio.sleep(2)
 
     if not success:
         error_msg = str(last_error) if last_error else "Unknown error"
@@ -101,5 +103,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
     
-    print("Bot is running with robust async error-handling code...")
+    print("Bot is running with stable Gemini 1.5 Flash...")
     app.run_polling()
