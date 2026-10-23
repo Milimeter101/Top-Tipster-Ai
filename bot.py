@@ -63,9 +63,9 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
         )
 
-        # Thinking Budget ကို 0 ထားရှိခြင်းဖြင့် အချိန်မဆွဲဘဲ ချက်ချင်း အဖြေထုတ်ပေးမည်
+        # Google ညွှန်ကြားထားသည့် gemini-3.8-flash သို့ အတိအကျ ပြောင်းလဲထားပါသည်
         response = await client.aio.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
@@ -89,5 +89,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
     
-    print("Bot is running with speed-optimized settings...")
+    print("Bot is running with Gemini 3.8 Flash model...")
     app.run_polling()
