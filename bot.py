@@ -62,8 +62,9 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
         )
 
+        # Gemini Model အသစ်သို့ ပြောင်းလဲထားပါသည်
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config={
                 'system_instruction': SYSTEM_INSTRUCTION,
