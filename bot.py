@@ -1,9 +1,11 @@
 import os
-import requests
 import logging
-import google.generativeai as genai
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+from google import genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.request import HTTPXRequest
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -13,8 +15,8 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
-# Gemini Setup
-genai.configure(api_key=GEMINI_API_KEY)
+# Gemini Setup (Google GenAI SDK အသစ်)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 🧠 ဘွတ်ကီကြေး မာယာများကိုပါ ထည့်သွင်းစဉ်းစားမည့် System Instruction
 SYSTEM_INSTRUCTION = """
@@ -23,10 +25,17 @@ Your core expertise is reading bookmaker traps, analyzing handicap lines manipul
 Always respond strictly in professional, analytical Burmese language.
 """
 
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_INSTRUCTION
-)
+# --- Render အတွက် Dummy Web Server (Port ဖွင့်ပေးရန်) ---
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running alive!")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    server.serve_forever()
 
 # --- Telegram Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,23 +56,35 @@ async def analyze_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 ပွဲစဉ်အချက်အလက်များနှင့် ဘွတ်ကီကြေးများကို စစ်ဆေး၍ သုံးသပ်နေပါသည်။ ခဏစောင့်ပေးပါ...")
 
     try:
-        # Prompt construction for Gemini AI analysis
         prompt = (
             f"Analyze this match for parlay betting stability and bookmaker odds traps:\n"
             f"Match: {text}\n"
             f"Please evaluate potential handicap lines, recent forms, head-to-head records, and provide the safest pick with Void/Push potential in professional Burmese language."
         )
 
-        # Generate AI Analysis
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config={
+                'system_instruction': SYSTEM_INSTRUCTION,
+            }
+        )
         await update.message.reply_text(response.text, parse_mode="Markdown")
 
     except Exception as e:
         await update.message.reply_text(f"⚠️ Error ဖြစ်ပေါ်နေပါသည်: {str(e)}")
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    # 1. Start Dummy Server in background thread for Render Port Binding
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
+    # 2. Setup Telegram Application with timeout fixes
+    request = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).request(request).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, analyze_match))
-    print("Bot is running...")
+    
+    print("Bot is running with network timeout fixes and port binding...")
     app.run_polling()
